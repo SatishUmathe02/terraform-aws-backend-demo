@@ -1,0 +1,154 @@
+name: Setup Terraform Backend (AWS)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to setup backend for'
+        required: true
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+        default: 'dev'
+      hospital_id:
+        description: 'Hospital ID (e.g., hospital-001, cityhealth, etc.)'
+        required: true
+        type: string
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  BACKEND_BUCKET: "med-${{ github.event.inputs.environment }}-tfstate"
+  BACKEND_DYNAMODB_TABLE: "terraform-locks-${{ github.event.inputs.environment }}"
+  BACKEND_PREFIX: "tfstate"
+
+jobs:
+  validate-hospital-id:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate Hospital ID Format
+        run: |
+          HOSPITAL_ID="${{ github.event.inputs.hospital_id }}"
+
+          if [[ ! "$HOSPITAL_ID" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            echo "❌ Invalid hospital ID format"
+            exit 1
+          fi
+
+          if [ ${#HOSPITAL_ID} -lt 3 ] || [ ${#HOSPITAL_ID} -gt 50 ]; then
+            echo "❌ Invalid hospital ID length"
+            exit 1
+          fi
+
+          echo "✅ Hospital ID validated: $HOSPITAL_ID"
+
+  setup-backend:
+    runs-on: ubuntu-latest
+    needs: validate-hospital-id
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Create S3 Bucket (if not exists)
+        run: |
+          if ! aws s3api head-bucket --bucket $BACKEND_BUCKET 2>/dev/null; then
+            echo "Creating S3 bucket..."
+            aws s3api create-bucket \
+              --bucket $BACKEND_BUCKET \
+              --region $AWS_REGION \
+              --create-bucket-configuration LocationConstraint=$AWS_REGION
+          else
+            echo "✅ S3 bucket already exists"
+          fi
+
+      - name: Enable S3 Versioning
+        run: |
+          aws s3api put-bucket-versioning \
+            --bucket $BACKEND_BUCKET \
+            --versioning-configuration Status=Enabled
+
+      - name: Enable S3 Encryption
+        run: |
+          aws s3api put-bucket-encryption \
+            --bucket $BACKEND_BUCKET \
+            --server-side-encryption-configuration '{
+              "Rules": [{
+                "ApplyServerSideEncryptionByDefault": {
+                  "SSEAlgorithm": "AES256"
+                }
+              }]
+            }''
+
+      - name: Create DynamoDB Lock Table
+        run: |
+          if ! aws dynamodb describe-table --table-name $BACKEND_DYNAMODB_TABLE >/dev/null 2>&1; then
+            echo "Creating DynamoDB table for state locking..."
+            aws dynamodb create-table \
+              --table-name $BACKEND_DYNAMODB_TABLE \
+              --attribute-definitions AttributeName=LockID,AttributeType=S \
+              --key-schema AttributeName=LockID,KeyType=HASH \
+              --billing-mode PAY_PER_REQUEST
+          else
+            echo "✅ DynamoDB table already exists"
+          fi
+
+      - name: Enable DynamoDB Point-in-Time Recovery
+        run: |
+          aws dynamodb update-continuous-backups \
+            --table-name $BACKEND_DYNAMODB_TABLE \
+            --point-in-time-recovery-specification PointInTimeRecoveryEnabled=true
+
+      - name: Check Hospital State File
+        id: check-state
+        run: |
+          STATE_FILE="$BACKEND_PREFIX/${{ github.event.inputs.hospital_id }}-${{ github.event.inputs.environment }}.terraform.tfstate"
+
+          if aws s3api head-object \
+            --bucket $BACKEND_BUCKET \
+            --key "$STATE_FILE" >/dev/null 2>&1; then
+            echo "state_exists=true" >> $GITHUB_OUTPUT
+            echo "⚠️ State file already exists"
+          else
+            echo "state_exists=false" >> $GITHUB_OUTPUT
+            echo "✅ New hospital - state file will be created on first apply"
+          fi
+
+      - name: Create Backend Configuration
+        run: |
+          mkdir -p backend-configs
+
+          cat > backend-configs/backend-${{ github.event.inputs.hospital_id }}-${{ github.event.inputs.environment }}.hcl << EOF
+          bucket         = "$BACKEND_BUCKET"
+          key            = "$BACKEND_PREFIX/${{ github.event.inputs.hospital_id }}-${{ github.event.inputs.environment }}.terraform.tfstate"
+          region         = "$AWS_REGION"
+          dynamodb_table = "$BACKEND_DYNAMODB_TABLE"
+          encrypt        = true
+          EOF
+
+          cat backend-configs/backend-${{ github.event.inputs.hospital_id }}-${{ github.event.inputs.environment }}.hcl
+
+      - name: Upload Backend Config
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-config-${{ github.event.inputs.hospital_id }}-${{ github.event.inputs.environment }}
+          path: backend-configs/
+          retention-days: 90
+
+      - name: Display Backend Configuration Summary
+        run: |
+          echo "✅ AWS Terraform Backend setup completed!"
+          echo ""
+          echo "🏥 Hospital ID: ${{ github.event.inputs.hospital_id }}"
+          echo "🌍 Environment: ${{ github.event.inputs.environment }}"
+          echo "🪣 S3 Bucket: $BACKEND_BUCKET"
+          echo "📄 State File: $BACKEND_PREFIX/${{ github.event.inputs.hospital_id }}-${{ github.event.inputs.environment }}.terraform.tfstate"
+          echo "🔐 DynamoDB Table: $BACKEND_DYNAMODB_TABLE"
+          echo "🔄 State Exists: ${{ steps.check-state.outputs.state_exists }}"
