@@ -85,7 +85,7 @@ jobs:
                   "SSEAlgorithm": "AES256"
                 }
               }]
-            }''
+            }
 
       - name: Create DynamoDB Lock Table
         run: |
