@@ -19,7 +19,7 @@ on:
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
-  BACKEND_BUCKET: "med-${{ github.event.inputs.environment }}-tfstate"
+  BACKEND_BUCKET: "med-${{ github.event.inputs.hospital_id }}-tfstate"
   BACKEND_DYNAMODB_TABLE: "terraform-locks-${{ github.event.inputs.environment }}"
   BACKEND_PREFIX: "tfstate"
 
