@@ -1,1 +1,215 @@
 
+name: Terraform Infrastructure Deploy (AWS)
+
+on:
+  workflow_dispatch:
+    inputs:
+      hospital_id:
+        description: 'Hospital ID (must match backend setup)'
+        required: true
+        type: string
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        type: choice
+        options: [dev, staging, prod]
+        default: dev
+      action:
+        description: 'Terraform action'
+        required: true
+        type: choice
+        options: [plan, apply, destroy]
+        default: plan
+      auto_approve:
+        description: 'Auto approve apply/destroy'
+        type: boolean
+        default: false
+
+env:
+  TERRAFORM_VERSION: "1.5.0"
+  WORKING_DIR: "iac"
+
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  BACKEND_BUCKET: "med-${{ github.event.inputs.hospital_id }}-tfstate"
+  BACKEND_DYNAMODB_TABLE: "terraform-locks-${{ github.event.inputs.environment }}"
+  STATE_KEY: "tfstate/${{ github.event.inputs.hospital_id }}-${{ github.event.inputs.environment }}.terraform.tfstate"
+
+# ---------------------------------------------------------
+jobs:
+  validate-inputs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate Hospital ID
+        run: |
+          ID="${{ github.event.inputs.hospital_id }}"
+          [[ "$ID" =~ ^[a-zA-Z0-9_-]+$ ]] || exit 1
+          [[ ${#ID} -ge 3 && ${#ID} -le 50 ]] || exit 1
+          echo "✅ Hospital ID validated: $ID"
+
+      - name: Display Configuration
+        run: |
+          echo "Hospital:     ${{ github.event.inputs.hospital_id }}"
+          echo "Environment:  ${{ github.event.inputs.environment }}"
+          echo "Action:       ${{ github.event.inputs.action }}"
+          echo "Auto-approve: ${{ github.event.inputs.auto_approve }}"
+          echo "State Key:    $STATE_KEY"
+
+# ---------------------------------------------------------
+  terraform-validate:
+    runs-on: ubuntu-latest
+    needs: validate-inputs
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform FMT
+        run: terraform fmt -check -recursive
+        continue-on-error: true
+
+      - name: Terraform Init (no backend)
+        run: terraform init -backend=false
+
+      - name: Terraform Validate
+        run: terraform validate -no-color
+
+# ---------------------------------------------------------
+  terraform-plan:
+    runs-on: ubuntu-latest
+    needs: terraform-validate
+    if: github.event.inputs.action != 'destroy'
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Create Backend Config
+        run: |
+          cat > backend.tf <<EOF
+          terraform {
+            backend "s3" {
+              bucket         = "$BACKEND_BUCKET"
+              key            = "$STATE_KEY"
+              region         = "$AWS_REGION"
+              dynamodb_table = "$BACKEND_DYNAMODB_TABLE"
+              encrypt        = true
+            }
+          }
+          EOF
+
+      - name: Create Hospital Variables
+        run: |
+          cat > hospital.auto.tfvars <<EOF
+          hospital_identifier = "${{ github.event.inputs.hospital_id }}"
+          environment         = "${{ github.event.inputs.environment }}"
+          EOF
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          set +e
+          terraform plan -out=tfplan -detailed-exitcode
+          echo "exitcode=$?" >> $GITHUB_OUTPUT
+
+      - name: Upload Plan
+        if: steps.plan.outputs.exitcode == '2'
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-${{ github.event.inputs.hospital_id }}-${{ github.event.inputs.environment }}
+          path: |
+            ${{ env.WORKING_DIR }}/tfplan
+            ${{ env.WORKING_DIR }}/backend.tf
+            ${{ env.WORKING_DIR }}/hospital.auto.tfvars
+          retention-days: 5
+
+# ---------------------------------------------------------
+  terraform-apply:
+    runs-on: ubuntu-latest
+    needs: terraform-plan
+    if: github.event.inputs.action == 'apply'
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: terraform-plan-${{ github.event.inputs.hospital_id }}-${{ github.event.inputs.environment }}
+          path: ${{ env.WORKING_DIR }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: |
+          if [ "${{ github.event.inputs.auto_approve }}" = "true" ]; then
+            terraform apply -auto-approve tfplan
+          else
+            terraform apply tfplan
+          fi
+
+# ---------------------------------------------------------
+  terraform-destroy:
+    runs-on: ubuntu-latest
+    needs: terraform-validate
+    if: github.event.inputs.action == 'destroy'
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Destroy
+        run: |
+          if [ "${{ github.event.inputs.auto_approve }}" = "true" ]; then
+            terraform destroy -auto-approve
+          else
+            terraform destroy
+          fi
