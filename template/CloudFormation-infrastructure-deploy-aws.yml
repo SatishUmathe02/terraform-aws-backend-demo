@@ -11,6 +11,10 @@ Parameters:
     AllowedValues: [dev, staging, prod]
     Default: dev
 
+  DBPassword:
+    Type: String
+    NoEcho: true
+
 Resources:
 
 # ---------------- VPC ----------------
@@ -91,7 +95,7 @@ Resources:
       SubnetId: !Ref PublicSubnet
       SecurityGroupIds:
         - !Ref WebSecurityGroup
-      ImageId: ami-0c55b159cbfafe1f0
+      ImageId: !Sub "{{resolve:ssm:/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2}}"
       Tags:
         - Key: Name
           Value: !Sub "${HospitalId}-${Environment}-ec2"
@@ -113,7 +117,7 @@ Resources:
       DBInstanceClass: db.t3.micro
       Engine: mysql
       MasterUsername: admin
-      MasterUserPassword: Password123!
+      MasterUserPassword: !Ref DBPassword
       PubliclyAccessible: false
       DBSubnetGroupName: !Ref DBSubnetGroup
 
@@ -121,7 +125,7 @@ Resources:
   S3Bucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "med-${HospitalId}-${Environment}-bucket"
+      BucketName: !Sub "med-${HospitalId}-${Environment}-${AWS::AccountId}"
 
 # ---------------- Outputs ----------------
 Outputs:
