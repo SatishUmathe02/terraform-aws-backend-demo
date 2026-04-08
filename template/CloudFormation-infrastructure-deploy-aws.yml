@@ -1,19 +1,10 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Full Production Infrastructure for Hospital App
 
-Parameters:
-  HospitalId:
-    Type: String
-    Default: med123
-
-  Environment:
-    Type: String
-    AllowedValues: [dev, staging, prod]
-    Default: dev
-
-  DBPassword:
-    Type: String
-    NoEcho: true
+    --parameter-overrides \
+        HospitalId=${{ github.event.inputs.stack_name }} \
+        Environment=${{ github.event.inputs.environment }} \
+        DBPassword=${{ secrets.DB_PASSWORD }}
 
 Resources:
 

@@ -17,6 +17,7 @@ on:
           - staging
           - prod
         default: dev
+               
 
 jobs:
   deploy:
