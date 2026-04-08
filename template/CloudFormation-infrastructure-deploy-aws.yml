@@ -1,10 +1,17 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Full Production Infrastructure for Hospital App
 
-    --parameter-overrides \
-        HospitalId=${{ github.event.inputs.stack_name }} \
-        Environment=${{ github.event.inputs.environment }} \
-        DBPassword=${{ secrets.DB_PASSWORD }}
+  Parameters:
+   HospitalId:
+   Type: String
+
+  Environment:
+   Type: String
+   AllowedValues: [dev, staging, prod]
+
+   DBPassword:
+    Type: String
+    NoEcho: true
 
 Resources:
 

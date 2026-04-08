@@ -39,13 +39,16 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-south-1
 
-      - name: Deploy CloudFormation Stack
-        run: |
+     - name: Deploy CloudFormation Stack
+       run: |
           aws cloudformation deploy \
-            --template-file template/CloudFormation-infrastructure-deploy-aws.yml \
-            --stack-name ${{ github.event.inputs.stack_name }}  \
-            --parameter-overrides HospitalId=${{ github.event.inputs.stack_name }} Environment=${{ github.event.inputs.environment }} \
-            --capabilities CAPABILITY_NAMED_IAM
+          --template-file template/CloudFormation-infrastructure-deploy-aws.yml \
+          --stack-name ${{ github.event.inputs.stack_name }} \
+          --parameter-overrides \
+          HospitalId=${{ github.event.inputs.stack_name }} \
+          Environment=${{ github.event.inputs.environment }} \
+          DBPassword=${{ secrets.DB_PASSWORD }} \
+          --capabilities CAPABILITY_NAMED_IAM
 
       - name: Get Stack Events
         if: failure()
