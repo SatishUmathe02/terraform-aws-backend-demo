@@ -29,7 +29,7 @@ jobs:
       
       - name: Delete Old Stack (if exists)
         run: |
-            aws cloudformation delete-stack --stack-name hospital-stack || true
+            aws cloudformation delete-stack --stack-name ${{ github.event.inputs.stack_name }} || true
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -42,8 +42,8 @@ jobs:
         run: |
           aws cloudformation deploy \
             --template-file template/CloudFormation-infrastructure-deploy-aws.yml \
-            --stack-name hospital-stack \
-            --parameter-overrides HospitalId=Rite_Hospital_01 Environment=dev \
+            --stack-name ${{ github.event.inputs.stack_name }}  \
+            --parameter-overrides HospitalId=${{ github.event.inputs.stack_name }} Environment=${{ github.event.inputs.environment }} \
             --capabilities CAPABILITY_NAMED_IAM
 
       - name: Get Stack Events
