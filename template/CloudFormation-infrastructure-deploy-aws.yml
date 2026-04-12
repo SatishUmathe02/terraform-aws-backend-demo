@@ -1,17 +1,17 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Full Production Infrastructure for Hospital App
 
-  Parameters:
-   HospitalId:
-   Type: String
+Parameters:
+  HospitalId:
+  Type: String
 
-  Environment:
-   Type: String
-   AllowedValues: [dev, staging, prod]
+Environment:
+  Type: String
+  AllowedValues: [dev, staging, prod]
 
-   DBPassword:
-    Type: String
-    NoEcho: true
+DBPassword:
+  Type: String
+  NoEcho: true
 
 Resources:
 
