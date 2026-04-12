@@ -45,8 +45,8 @@ jobs:
           --template-file template/CloudFormation-infrastructure-deploy-aws.yml \
           --stack-name ${{ github.event.inputs.stack_name }} \
           --parameter-overrides \
-          HospitalId=${{ github.event.inputs.stack_name }} \
-          Environment=${{ github.event.inputs.environment }} \
+          HospitalId=${{ inputs.stack_name }} \
+          Environment=${{ inputs.environment }} \
           DBPassword=${{ secrets.DB_PASSWORD }} \
           --capabilities CAPABILITY_NAMED_IAM
 
