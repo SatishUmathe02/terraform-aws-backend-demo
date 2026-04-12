@@ -3,15 +3,18 @@ Description: Full Production Infrastructure for Hospital App
 
 Parameters:
   HospitalId:
-  Type: String
+    Type: String
 
-Environment:
-  Type: String
-  AllowedValues: [dev, staging, prod]
+  Environment:
+    Type: String
+    AllowedValues:
+      - dev
+      - staging
+      - prod
 
-DBPassword:
-  Type: String
-  NoEcho: true
+  DBPassword:
+    Type: String
+    NoEcho: true
 
 Resources:
 
