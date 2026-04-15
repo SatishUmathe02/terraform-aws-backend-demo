@@ -44,6 +44,7 @@ Resources:
       VpcId: !Ref MyVPC
       CidrBlock: 10.0.1.0/24
       MapPublicIpOnLaunch: true
+      AvailabilityZone: ap-south-1a
 
 # ---------------- Private Subnet ----------------
   PrivateSubnet:
@@ -51,6 +52,7 @@ Resources:
     Properties:
       VpcId: !Ref MyVPC
       CidrBlock: 10.0.2.0/24
+      AvailabilityZone: ap-south-1b 
 
 # ---------------- Route Table ----------------
   PublicRouteTable:
