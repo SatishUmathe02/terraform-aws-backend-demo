@@ -1,4 +1,4 @@
-AWSTemplateFormatVersion: '2010-09-09'
+﻿AWSTemplateFormatVersion: '2026-04-04'
 Description: Full Production Infrastructure for Hospital App
 
 Parameters:
@@ -127,6 +127,39 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "med-${HospitalId}-${Environment}-${AWS::AccountId}"
+
+# ---------------- Lambda IAM Role ----------------
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${HospitalId}-${Environment}-lambda-role"
+      AssumeRolePolicyDocument:
+        Version: '2026-04-04'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+# ---------------- Lambda Function ----------------
+  MyLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${HospitalId}-${Environment}-lambda"
+      Runtime: nodejs18.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            return {
+              statusCode: 200,
+              body: JSON.stringify("Hello from Lambda 🚀"),
+            };
+          };
+      Timeout: 10
 
 # ---------------- Outputs ----------------
 Outputs:
