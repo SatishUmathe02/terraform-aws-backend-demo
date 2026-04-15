@@ -1,4 +1,4 @@
-﻿AWSTemplateFormatVersion: '2026-04-04'
+﻿AWSTemplateFormatVersion: '2010-09-09' # alwase fixed version 
 Description: Full Production Infrastructure for Hospital App
 
 Parameters:
@@ -134,7 +134,7 @@ Resources:
     Properties:
       RoleName: !Sub "${HospitalId}-${Environment}-lambda-role"
       AssumeRolePolicyDocument:
-        Version: '2026-04-04'
+        Version: '2012-10-17' # alwase fixed version 
         Statement:
           - Effect: Allow
             Principal:
