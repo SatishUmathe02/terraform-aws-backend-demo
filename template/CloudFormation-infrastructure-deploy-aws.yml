@@ -171,5 +171,5 @@ Outputs:
   S3BucketName:
     Value: !Ref S3Bucket
 
-  DatabaseEndpoint:
-    Value: !GetAtt MyDatabase.Endpoint.Address
+  # DatabaseEndpoint:
+  #   Value: !GetAtt MyDatabase.Endpoint.Address
