@@ -17,7 +17,6 @@ on:
           - staging
           - prod
         default: dev
-               
 
 jobs:
   deploy:
@@ -27,32 +26,43 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      
-      - name: Delete Old Stack (if exists)
-        run: |
-            aws cloudformation delete-stack --stack-name ${{ github.event.inputs.stack_name }} || true
-
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-south-1
- 
+
+      - name: Delete Old Stack (if exists)
+        run: |
+          aws cloudformation delete-stack \
+          --stack-name ${{ github.event.inputs.stack_name }} || true
+
+      - name: Wait For Stack Delete
+        run: |
+          aws cloudformation wait stack-delete-complete \
+          --stack-name ${{ github.event.inputs.stack_name }} || true
+
       - name: Deploy CloudFormation Stack
         run: |
           aws cloudformation deploy \
           --template-file template/CloudFormation-infrastructure-deploy-aws.yml \
           --stack-name ${{ github.event.inputs.stack_name }} \
           --parameter-overrides \
-          HospitalId=${{ inputs.stack_name }} \
-          Environment=${{ inputs.environment }} \
-          DBPassword=${{ secrets.DB_PASSWORD }} \
+            HospitalId=${{ github.event.inputs.stack_name }} \
+            Environment=${{ github.event.inputs.environment }} \
+            DBPassword=${{ secrets.DB_PASSWORD }} \
           --capabilities CAPABILITY_NAMED_IAM
+
+      - name: Show Stack Outputs
+        run: |
+          aws cloudformation describe-stacks \
+          --stack-name ${{ github.event.inputs.stack_name }} \
+          --query "Stacks[0].Outputs"
 
       - name: Get Stack Events
         if: failure()
         run: |
-            aws cloudformation describe-stack-events \
-            --stack-name hospital-stack \
-            --max-items 20
+          aws cloudformation describe-stack-events \
+          --stack-name ${{ github.event.inputs.stack_name }} \
+          --max-items 20
