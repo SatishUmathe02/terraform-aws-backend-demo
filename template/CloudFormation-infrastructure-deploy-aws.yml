@@ -120,7 +120,7 @@ Resources:
       DBInstanceClass: db.t3.micro
       Engine: sqlserver-ex
       MasterUsername: admin
-      MasterUserPassword: !Ref DBPassword
+      MasterUserPassword: Hospital05312026#
       PubliclyAccessible: false
       DBSubnetGroupName: !Ref DBSubnetGroup
 
